@@ -1,0 +1,19 @@
+﻿@model List<Commerce.App.Models.Product.ProductModel>
+@{
+    ViewData["Title"] = "Products";
+}
+
+<div class="text-center">
+    
+    @if (Model != null && Model.Any())
+    {
+        foreach (var item in Model)
+        {
+            <div>
+                <h2>@item.Title</h2>
+                <h2>@item.Price.ToString("0.00")</h2>
+            </div>
+        }
+    }
+    
+</div>

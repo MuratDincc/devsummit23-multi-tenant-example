@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  
+  db:
+    container_name: db
+    image: postgres:10.5
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    ports:
+      - '5438:5432'
+    networks:
+      - ngnix-network
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+  
+  redis:
+    container_name: redis
+    image: bitnami/redis:latest
+    restart: always
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - '6379:6379'
+    networks:
+      - ngnix-network
+  
+  nginx-proxy-manager:
+    container_name: nginx-proxy-manager
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: always
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - ngnix-network
+  
+  tenant-api:
+    container_name: tenant-api
+    restart: always
+    build:
+      context: .
+      dockerfile: src/tenant/Tenant.Api/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DatabaseConnection=Host=db; Port=5432; Database=tenant_db; Username=postgres; Password=postgres
+    ports:
+      - "5501:80"
+    networks:
+      - ngnix-network
+    depends_on: 
+      - db
+  
+  commerce-api:
+    container_name: commerce-api
+    restart: always
+    build:
+      context: .
+      dockerfile: src/api/Commerce.Api/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+    ports:
+      - "5502:80"
+    networks:
+      - ngnix-network
+    depends_on:
+      - db
+      
+  bff-api:
+    container_name: bff-api
+    restart: always
+    build:
+      context: .
+      dockerfile: src/bff/BFF.Api/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - Services__Tenant=http://tenant-api
+      - Services__Commerce=http://commerce-api
+    ports:
+      - "5500:80"
+    networks:
+      - ngnix-network
+    depends_on:
+      - db
+      
+  commerce-app:
+    container_name: commerce-app
+    restart: always
+    build:
+      context: .
+      dockerfile: src/app/Commerce.App/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - Services__Bff=http://bff-api
+    ports:
+      - "5503:80"
+    networks:
+      - ngnix-network
+    depends_on:
+      - bff-api
+      - commerce-api
+      - tenant-api
+
+networks:
+  ngnix-network:
+    driver: bridge
